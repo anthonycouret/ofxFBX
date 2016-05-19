@@ -131,7 +131,7 @@ bool ofxFBXScene::load( const std::string & app_name, string path, ofxFBXSceneSe
     }
     
     // populate meshes //
-    populateMeshesRecursive( lScene->GetRootNode(), currentFbxAnimationLayer );
+    populateMeshesRecursive( lScene->GetRootNode(), currentFbxAnimationLayer, 0 );
     
     // populate bones //
     if( _settings.importBones ) {
