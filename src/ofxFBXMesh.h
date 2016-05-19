@@ -9,6 +9,7 @@
 #pragma once
 
 #define FBXSDK_NEW_API
+<<<<<<< HEAD
 /*
 #if defined(TARGET_LINUX) && !defined(TARGET_OPENGLES)
     #include <fbxsdk.h>
@@ -27,6 +28,19 @@
 #endif
 */
 
+=======
+//#if defined(TARGET_LINUX) && !defined(TARGET_OPENGLES)
+//    #include <fbxsdk.h>
+//#endif
+//
+//#include "ofMain.h"
+//#if defined(TARGET_OSX)
+//    #include "fbxsdk.h"
+//#endif
+
+#include "ofMain.h"
+#include <fbxsdk.h>
+>>>>>>> develop
 
 #include "ofVboMesh.h"
 #include "ofxFBXNode.h"
@@ -46,6 +60,7 @@ public:
         
     }
     
+    bool bRender;
     int triangleCount;
     int indexOffset;
     int totalIndices;
@@ -77,29 +92,35 @@ public:
 private:
     
     void computeBlendShapes( ofMesh* aMesh, FbxTime& pTime, FbxAnimLayer * pAnimLayer );
-    void computeSkinDeformation( FbxAMatrix& pGlobalPosition, FbxTime& pTime, FbxAnimLayer * pAnimLayer, FbxVector4* pVertexArray, FbxPose* pPose );
+    void computeSkinDeformation( FbxAMatrix& pGlobalPosition, FbxTime& pTime, FbxAnimLayer * pAnimLayer, FbxVector4* pVertexArray, FbxVector4* pNormalsArray, FbxPose* pPose );
     void computeLinearDeformation(FbxAMatrix& pGlobalPosition,
                                   FbxMesh* pMesh,
                                   FbxTime& pTime,
                                   FbxVector4* pVertexArray,
-                                  FbxPose* pPose );
+                                  FbxPose* pPose,
+                                  bool bNormals);
     void computeDualQuaternionDeformation(FbxAMatrix& pGlobalPosition,
                                           FbxMesh* pMesh,
                                           FbxTime& pTime,
                                           FbxVector4* pVertexArray,
-                                          FbxPose* pPose );
+                                          FbxPose* pPose,
+                                          bool bNormals);
     void computeClusterDeformation(FbxAMatrix& pGlobalPosition,
                                    FbxMesh* pMesh,
                                    FbxCluster* pCluster,
                                    FbxAMatrix& pVertexTransformMatrix,
                                    FbxTime pTime,
-                                   FbxPose* pPose);
+                                   FbxPose* pPose,
+                                   bool bNormals);
+    
+    void populateNormals( FbxVector4* pNormalsArray );
     
     vector<ofxFBXSubMesh> subMeshes;
     ofVbo veebs;
 	ofMesh mesh;
 	ofMesh original;
 	FbxMesh* fbxMesh;
+    FbxVector4* mNormalsArray;
     bool bAllMappedByControlPoint;
 };
 

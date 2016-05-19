@@ -66,7 +66,8 @@ bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
     
     // Convert Axis System to what is used in this example, if needed
     FbxAxisSystem SceneAxisSystem = lScene->GetGlobalSettings().GetAxisSystem();
-    FbxAxisSystem OurAxisSystem(FbxAxisSystem::eYAxis, FbxAxisSystem::eParityOdd, FbxAxisSystem::eRightHanded);
+//    FbxAxisSystem OurAxisSystem(FbxAxisSystem::eYAxis, FbxAxisSystem::eParityOdd, FbxAxisSystem::eRightHanded);
+    FbxAxisSystem OurAxisSystem( FbxAxisSystem::OpenGL );
     if( SceneAxisSystem != OurAxisSystem ) {
         OurAxisSystem.ConvertScene(lScene);
     }
@@ -99,9 +100,9 @@ bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
 //    lScene->GetGlobalSettings().SetTimeMode( FbxTime::eCustom );
 //    lScene->GetGlobalSettings().SetTimeMode( FbxTime::eCustom );
     // Initialize the frame period.
-//    fbxFrameTime.SetTime(0, 0, 0, 1, 0, lScene->GetGlobalSettings().GetTimeMode());
+    fbxFrameTime.SetTime(0, 0, 0, 1, 0, lScene->GetGlobalSettings().GetTimeMode());
 //    fbxFrameTime.Set( lScene->GetGlobalSettings().GetFrameRate() );
-    fbxFrameTime.SetTime(0, 0, 0, 1, 0, FbxTime::eFrames24 );
+//    fbxFrameTime.SetTime(0, 0, 0, 1, 0, FbxTime::eFrames24 );
 //    fbxFrameTime.SetSecondDouble( 1.f / 24.f );
     cout << "time mode: " << lScene->GetGlobalSettings().GetTimeMode() << endl;
     
@@ -134,16 +135,7 @@ bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
     
     // populate bones //
     if( _settings.importBones ) {
-//        populateBonesRecursive( lScene->GetRootNode(), currentFbxAnimationLayer );
-//        parentBonesRecursive( lScene->GetRootNode() );
         constructSkeletons( lScene->GetRootNode(), currentFbxAnimationLayer );
-    }
-    
-    
-    if( _settings.cacheSkeletonAnimations && areAnimationsEnabled() ) {
-        if( getNumAnimations() > 0 ) {
-            populateCachedSkeletonAnimationInformation();
-        }
     }
     
     return true;
@@ -215,7 +207,7 @@ void ofxFBXScene::cacheTexturesInScene( FbxScene* pScene ) {
             }
             
             if(!bFoundTexture) {
-                ofLogWarning("Could not find texture ") << lFileName;
+                ofLogWarning("Could not find texture ") << filepath;
                 continue;
             }
             
@@ -232,9 +224,9 @@ void ofxFBXScene::cacheTexturesInScene( FbxScene* pScene ) {
                     ofLogVerbose("Loaded the texture from ") << filepath << endl;
                     
                     texture->getTextureData().bFlipTexture = true;
-//                    texture->getTextureData().useTextureMatrix = false; // TEMP, useTextureMatrix is private now, TODO: a workaround
 
-
+                    texture->disableTextureMatrix();
+                    
                     lFileTexture->SetUserDataPtr( texture );
                 } else {
                     ofLogWarning("Failed to load texture for ") << lFileName;
@@ -261,9 +253,16 @@ void ofxFBXScene::deleteCachedTexturesInScene( FbxScene* pScene ) {
 }
 
 bool ofxFBXScene::isValidTexturePath( string aPathToTexture ) {
-    ofFile tfile = (string)aPathToTexture;
+    ofFile tfile( (string)aPathToTexture );
     if(!tfile.exists()) return false;
-    return ( tfile.getExtension() == "tga" || tfile.getExtension() == "jpg" || tfile.getExtension() == "png" || tfile.getExtension() == "bmp");
+    bool bGoodToGo = false;
+    if(tfile.getExtension() == "tga") bGoodToGo = true;
+    if(tfile.getExtension() == "jpg") bGoodToGo = true;
+    if(tfile.getExtension() == "png") bGoodToGo = true;
+    if(tfile.getExtension() == "bmp") bGoodToGo = true;
+    if(tfile.getExtension() == "tif") bGoodToGo = true;
+    if(tfile.getExtension() == "tiff") bGoodToGo = true;
+    return bGoodToGo;
 }
 
 #pragma mark - Materials
@@ -356,36 +355,7 @@ void ofxFBXScene::populateAnimations( vector<ofxFBXAnimation>& aInVector) {
 }
 
 //--------------------------------------------------------------
-void ofxFBXScene::populateCachedSkeletonAnimations( vector< vector<ofxFBXCachedSkeletonAnimation> >& aInVector ) {
-    for(int i = 0; i < cachedSkeletonAnimations.size(); i++ ) {
-        aInVector.push_back( cachedSkeletonAnimations[i] );
-    }
-}
-
-//--------------------------------------------------------------
-void ofxFBXScene::populateCachedSkeletonAnimationInformation() {
-    
-    for( int i = 0; i < (int)animations.size(); i++ ) {
-        vector< ofxFBXCachedSkeletonAnimation > tanims;
-        for( int j = 0; j < (int)skeletons.size(); j++ ) {
-            tanims.push_back( ofxFBXCachedSkeletonAnimation() );
-            tanims.back().setup( skeletons[j], animations[i] );
-        }
-        if( tanims.size() ) {
-            cachedSkeletonAnimations.push_back( tanims );
-        }
-    }
-}
-
-//--------------------------------------------------------------
 void ofxFBXScene::populateSkeletons( vector< shared_ptr<ofxFBXSkeleton> >& aInSkeletons ) {
-//    list<ofxFBXSkeleton>::iterator itSkeletons;
-//    aInSkeletons.resize( skeletonList.size() );
-//    int i = 0;
-//    for( itSkeletons = skeletonList.begin(); itSkeletons != skeletonList.end(); itSkeletons++){
-//        aInSkeletons[i] = (*itSkeletons);
-//        i++;
-//    }
     aInSkeletons.resize( skeletons.size() );
     for( int i = 0; i < skeletons.size(); i++ ) {
         ofxFBXSkeleton tskeleton = *skeletons[i].get();
@@ -415,7 +385,7 @@ void ofxFBXScene::populateMeshesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLa
                 shared_ptr<ofxFBXMesh> mesh = meshes.back();
                 mesh->setup( pNode );
                 
-    //            cout << "ofxFBXScene :: populateMeshesRecursive : name = " << pNode->GetNameOnly() << endl;
+//            cout << "ofxFBXScene :: populateMeshesRecursive : name = " << pNode->GetNameOnly() << endl;
                 
                 FbxAMatrix lGlobalPosition = GetGlobalPosition(pNode, FBXSDK_TIME_INFINITE, NULL );
                 
@@ -478,7 +448,7 @@ void ofxFBXScene::populateBonesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLay
 // lets just be safe and parent the nodes after we have gone through and assigned them all
 // with their user data, to make sure all of them have been assigned
 //--------------------------------------------------------------
-void ofxFBXScene::parentBonesRecursive( FbxNode* pNode, list<FbxNode*>& aSkeletonBases ) {
+void ofxFBXScene::parentBonesRecursive( FbxNode* pNode, list<FbxNode*>& aSkeletonBases, int aBoneLevel ) {
     FbxNodeAttribute* lNodeAttribute = pNode->GetNodeAttribute();
     if (lNodeAttribute) {
         if (lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eSkeleton) {
@@ -490,6 +460,11 @@ void ofxFBXScene::parentBonesRecursive( FbxNode* pNode, list<FbxNode*>& aSkeleto
                         bonePtr->parentBoneName     = bonePtrParent->getName();
                         bonePtr->setParent( *bonePtrParent, true );
                         bonePtr->setScale( 1.f );
+//                        bonePtr->level = aBoneLevel;
+                        
+//                        if( bonePtrParent ) {
+//                            bonePtrParent->bones.push_back( shared_ptr< ofxFBXBone >( new ofxFBXBone( *bonePtr )));
+//                        }
 //                        bonePtr->setGlobalPosition( bonePtr->origNode.getGlobalPosition() );
 //                        bonePtr->setGlobalOrientation( bonePtr->origNode.getGlobalOrientation() );
 //                        origNode.setTransformMatrix( ofGetGlobalTransform( fbxNode, FBXSDK_TIME_INFINITE, NULL ) );
@@ -521,14 +496,14 @@ void ofxFBXScene::parentBonesRecursive( FbxNode* pNode, list<FbxNode*>& aSkeleto
             
 //            if(pNode->GetSkeleton()->GetSkeletonType() == FbxSkeleton::eRoot || pNode->GetSkeleton()->GetSkeletonType() == FbxSkeleton::eEffector) {
             if(pNode->GetSkeleton()->IsSkeletonRoot() ) {
-                cout << "parentBonesRecursive :: " << pNode->GetName() << " is the ROOT! " << endl;
+//                cout << "parentBonesRecursive :: " << pNode->GetName() << " is the ROOT! " << endl;
                 aSkeletonBases.push_back( pNode );
             }
         }
     }
     const int lChildCount = pNode->GetChildCount();
     for (int lChildIndex = 0; lChildIndex < lChildCount; ++lChildIndex) {
-        parentBonesRecursive( pNode->GetChild(lChildIndex), aSkeletonBases );
+        parentBonesRecursive( pNode->GetChild(lChildIndex), aSkeletonBases, aBoneLevel+1 );
     }
 }
 
@@ -537,7 +512,7 @@ void ofxFBXScene::constructSkeletons( FbxNode* pNode, FbxAnimLayer* pAnimLayer )
     populateBonesRecursive( pNode, pAnimLayer);
     list<FbxNode*> skeletonBases;
     
-    parentBonesRecursive( pNode, skeletonBases );
+    parentBonesRecursive( pNode, skeletonBases, 0 );
     list<FbxNode*>::iterator it;
     for(it = skeletonBases.begin(); it != skeletonBases.end(); ++it ) {
 //        skeletonList.push_back( ofxFBXSkeleton() );
@@ -546,25 +521,42 @@ void ofxFBXScene::constructSkeletons( FbxNode* pNode, FbxAnimLayer* pAnimLayer )
         skeletons.push_back( skeletonPtr );
         FbxNode* skeletonNode = *it;
         skeletonPtr->setup( skeletonNode );
-        constructSkeletonsRecursive( skeletonPtr.get(), skeletonNode );
+//        skeletonPtr->parentBonesRecursive( skeletonNode );
+//        skeletonPtr->bones.push_back( );
+        
+//        skeletonPtr->sourceBones[ skeletonNode->GetName() ] = static_cast<ofxFBXBone *>( skeletonNode->GetUserDataPtr() );
+        skeletonPtr->rootSource = static_cast<ofxFBXBone *>( skeletonNode->GetUserDataPtr() );
+//        constructSkeletonsRecursive( skeletonPtr.get(), skeletonNode, 0 );
+        constructSkeletonsRecursive( skeletonPtr.get(), skeletonNode, 0 );
     }
     
 }
 
 //--------------------------------------------------------------
-void ofxFBXScene::constructSkeletonsRecursive( ofxFBXSkeleton* aSkeleton, FbxNode* pNode ) {
-    if (pNode->GetNodeAttribute()) {
-        if (pNode->GetNodeAttribute()->GetAttributeType() == FbxNodeAttribute::eSkeleton) {
-            if(pNode->GetUserDataPtr() ) {
-                ofxFBXBone* bonePtr = static_cast<ofxFBXBone *>(pNode->GetUserDataPtr());
-                aSkeleton->addBone( bonePtr->getName(), bonePtr );
+void ofxFBXScene::constructSkeletonsRecursive( ofxFBXSkeleton* aSkeleton, FbxNode* pNode, int aBoneLevel ) {
+    FbxNodeAttribute* lNodeAttribute = pNode->GetNodeAttribute();
+    if (lNodeAttribute) {
+        if (lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eSkeleton) {
+            if(pNode->GetParent()) {
+                if(pNode->GetParent()->GetNodeAttribute()) {
+                    if(pNode->GetParent()->GetNodeAttribute()->GetAttributeType() == FbxNodeAttribute::eSkeleton) {
+                        if(pNode->GetParent()->GetNodeAttribute()->GetAttributeType() == FbxNodeAttribute::eSkeleton) {
+                            ofxFBXBone* bonePtr         = static_cast<ofxFBXBone *>(pNode->GetUserDataPtr());
+                            ofxFBXBone* bonePtrParent   = static_cast<ofxFBXBone *>(pNode->GetParent()->GetUserDataPtr());
+                            
+                            if( bonePtrParent ) {
+                                bonePtrParent->sourceBones[ bonePtr->getName() ] = bonePtr;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
     
     const int lChildCount = pNode->GetChildCount();
     for (int lChildIndex = 0; lChildIndex < lChildCount; ++lChildIndex) {
-        constructSkeletonsRecursive( aSkeleton, pNode->GetChild(lChildIndex) );
+        constructSkeletonsRecursive( aSkeleton, pNode->GetChild(lChildIndex), aBoneLevel+1 );
     }
 }
 

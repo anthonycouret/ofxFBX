@@ -8,16 +8,16 @@
 
 #pragma once
 #include "ofMain.h"
-
 #include <fbxsdk.h>
 
-/*
-#if defined(TARGET_LINUX) 
-    #include <fbxsdk.h>
-#else
-	#include "fbxsdk.h"
-#endif
-*/
+
+//#if defined(TARGET_LINUX) && !defined(TARGET_OPENGLES)
+//    #include <fbxsdk.h>
+//#endif
+//#if defined(TARGET_OSX)
+//    #include "fbxsdk.h"
+//#endif
+
 #include "ofxFBXNode.h"
 
 
@@ -29,31 +29,33 @@ public:
     
     bool doesExist();
     
+    void setAsRoot();
     void setup( FbxNode* pNode );
+    void setupFromSourceBones();
     void cacheStartTransforms();
     void update( FbxTime& pTime, FbxPose* pPose );
-    void draw( float aLen = 6.f);
+    void lateUpdate();
+    void draw( float aLen = 6.f, bool aBDrawAxes = true);
     
-    void reset();
-    void onPositionChanged();
-	void onOrientationChanged();
-	void onScaleChanged();
+    void pointTo( ofVec3f aTarget );
+    void pointTo( ofVec3f aTarget, ofVec3f aAxis );
     
     bool isLimb();
     bool hasSkeletonParent();
     
-    void enableExternalControl();
-    void disableExternalControl();
-    bool isExternalControlEnabled();
-    
-    void enableAnimation();
-    void disableAnimation();
+    void enableAnimation( bool bRecursively=false );
+    void disableAnimation( bool bRecursively=false );
     bool isAnimationEnabled();
     
     void updateFbxTransform();
     void updateFbxTransformLocal();
-    ofQuaternion getOriginalLocalRotation();
-    ofVec3f getOriginalLocalPosition();
+    ofQuaternion& getOriginalLocalRotation();
+    
+    int getNumBones();
+    map< string, ofxFBXBone* > getAllBones();
+    
+    string getAsString( int aLevel=0);
+    ofxFBXBone* getBone( string aName );
     
     FbxSkeleton* getFbxSkeleton();
     FbxNode* fbxNode;
@@ -61,12 +63,23 @@ public:
     
     string parentBoneName;
     
-protected:
+//    int level;
     
-    bool bExists;
-    ofQuaternion origLocalRotation;
-    ofVec3f origLocalPosition;
-    bool bExternalControlEnabled;
+    map< string, ofxFBXBone > bones;
+    map< string, ofxFBXBone* > sourceBones;
+    
+    ofxFBXBone* sourceBone;
+    
+    ofQuaternion origLocalRotation, origGlobalRotation;
+    ofMatrix4x4 origGlobalTransform;
+    ofMatrix4x4 origLocalTransform;
+    
+protected:
+    void findBoneRecursive( string aName, ofxFBXBone*& returnBone );
+    void populateBonesRecursive( map< string, ofxFBXBone* >& aBoneMap );
+    bool bExists, bIsRoot;
+    
+//    bool bExternalControlEnabled;
     bool bUpdateFromAnimation;
 };
 

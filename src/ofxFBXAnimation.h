@@ -9,17 +9,17 @@
 #pragma once
 
 #include "ofMain.h"
-#include <math.h> 
+#include <math.h>
 
 #include <fbxsdk.h>
-
-/*
-#if defined(TARGET_LINUX) 
-    #include <fbxsdk.h>
-#else
-	#include "fbxsdk.h"
-#endif
-*/
+//#if defined(TARGET_LINUX) && !defined(TARGET_OPENGLES)
+//    #include <fbxsdk.h>
+//#endif
+//
+//#include "ofMain.h"
+//    #if defined(TARGET_OSX)
+//#include "fbxsdk.h"
+//#endif
 
 class ofxFBXAnimation {
 public:
@@ -40,6 +40,10 @@ public:
     void togglePlayPause();
     bool isPlaying();
     bool isPaused();
+    bool isDone();
+    
+    void setLoops( bool aB );
+    bool getLoops();
     
     float getPosition();
     float getPositionSeconds();
@@ -70,6 +74,7 @@ protected:
     bool bPlaying;
     bool bLoop;
     bool bNewFrame;
+    bool bDone;
     float _speed;
     float _framerate;
     
