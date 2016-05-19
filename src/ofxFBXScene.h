@@ -26,27 +26,6 @@
 #include "ofMain.h"
 #include <fbxsdk.h>
 
-#if defined(TARGET_LINUX) 
-    #include <fbxsdk.h>
-	#include <fbxscene.h>
-#else
-	#include "fbxsdk.h"
-	#include "fbxsdk/scene/fbxscene.h"
-#endif
-	*/
-
-#include <fbxsdk.h>
-
-/*
-#if defined(TARGET_LINUX) 
-    #include <fbxsdk.h>
-#else
-	#include "fbxsdk.h"
-#endif
-*/
-
-//#include <fbxsdk/scene/fbxscene.h>
-
 #include "ofxFBXUtils.h"
 #include "ofxFBXAnimation.h"
 #include "ofxFBXMesh.h"
@@ -55,6 +34,17 @@
 #include "ofxFBXCluster.h"
 #include "ofxFBXSkeleton.h"
 #include "ofxFBXPose.h"
+
+#include "macro.h"
+
+DEF_CLASS_SMART_PTR( ofxFBXScene )
+
+#define ofxFBXSceneBEGIN CLOG( INFO, (this->_settings.log_id + "begin").c_str() ) << "";
+#define ofxFBXSceneINFO CLOG( INFO, this->_settings.log_id.c_str() )
+#define ofxFBXSceneWARN CLOG( WARNING, this->_settings.log_id.c_str() )
+#define ofxFBXSceneERROR CLOG( ERROR, this->_settings.log_id.c_str() )
+#define ofxFBXSceneBEGIN CLOG( INFO, (this->_settings.log_id + "begin").c_str() ) << "";
+#define ofxFBXSceneEND CLOG( INFO, (this->_settings.log_id ).c_str() ) << "\n\n";
 
 class ofxFBXSceneSettings {
 public:
@@ -65,6 +55,7 @@ public:
         importShapes                    = true;
         importGobos                     = true;
         importAnimations                = true;
+        log_id                          = "default";
     }
     
     bool importBones;
@@ -73,6 +64,7 @@ public:
     bool importShapes;
     bool importGobos;
     bool importAnimations;
+    string log_id;
 };
 
 
@@ -82,7 +74,7 @@ public:
     ofxFBXScene();
     ~ofxFBXScene();
     
-	bool load( string path, ofxFBXSceneSettings aSettings = ofxFBXSceneSettings() );
+	bool load( const std::string & app_name, string path, ofxFBXSceneSettings aSettings = ofxFBXSceneSettings() );
     
     FbxScene* getFBXScene();
     
@@ -103,7 +95,7 @@ public:
     string getFbxFolderPath();
 
 private:
-    void cacheTexturesInScene( FbxScene* pScene );
+    void cacheTexturesInScene( FbxScene* pScene, const std::string & app_name );
     void deleteCachedTexturesInScene( FbxScene* pScene );
     bool isValidTexturePath( string aPathToTexture );
     
@@ -112,11 +104,14 @@ private:
     
     void populateAnimationInformation();
     void populateCachedSkeletonAnimationInformation();
-    void populateMeshesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLayer );
+    void populateMeshesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLayer, int level );
     void populateBonesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLayer );
     void parentBonesRecursive( FbxNode* pNode, list<FbxNode*>& aSkeletonBases, int aBoneLevel );
     void constructSkeletons( FbxNode* pNode, FbxAnimLayer* pAnimLayer );
     void constructSkeletonsRecursive( ofxFBXSkeleton* aSkeleton, FbxNode* pNode, int aBoneLevel );
+    
+    mutable FbxTime mCache_Start, mCache_Stop;
+    void PreparePointCacheData(FbxScene* pScene, FbxTime &pCache_Start, FbxTime &pCache_Stop);
     
     FbxTime fbxFrameTime;
     string fbxFilePath;
@@ -134,6 +129,8 @@ private:
     FbxAnimLayer* currentFbxAnimationLayer;
     
     ofxFBXSceneSettings _settings;
+    
+    std::string m_app_name;
 };
 
 

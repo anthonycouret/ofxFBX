@@ -172,6 +172,15 @@ vector< ofMesh >& ofxFBXManager::getMeshes() {
     return meshes;
 }
 
+ofMesh& ofxFBXManager::getMesh( int index ) {
+    return meshes[ index ];
+}
+
+//--------------------------------------------------------------
+ofNode& ofxFBXManager::getMeshTransform( int index ) {
+    return meshTransforms[ index ];
+}
+
 //--------------------------------------------------------------
 int ofxFBXManager::getNumMeshes() {
     return (int)meshes.size();

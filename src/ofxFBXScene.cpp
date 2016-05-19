@@ -9,6 +9,10 @@
 #include "ofxFBXScene.h"
 #include "Common/Common.h"
 
+#include "easylogging++.h"
+
+#include "ogfTexture.hpp"
+
 //--------------------------------------------------------------
 ofxFBXScene::ofxFBXScene() {
     lSdkManager = NULL;
@@ -32,8 +36,10 @@ ofxFBXScene::~ofxFBXScene() {
 }
 
 //--------------------------------------------------------------
-bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
+bool ofxFBXScene::load( const std::string & app_name, string path, ofxFBXSceneSettings aSettings ) {
     bool lResult;
+    
+    this->m_app_name = app_name;
     
 	// Prepare the FBX SDK.
 	InitializeSdkObjects(lSdkManager, lScene);
@@ -89,7 +95,7 @@ bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
     
     // cache all of the textures by loading them from disk //
     if(_settings.importTextures) {
-        cacheTexturesInScene( lScene );
+        cacheTexturesInScene( lScene, app_name );
     }
     
     // cache all of the materials in the scene as ofxFBXMeshMaterial //
@@ -112,13 +118,7 @@ bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
     }
     
     if(animations.size() > 0) {
-        
-		
-		FbxAnimStack * lCurrentAnimationStack = lScene->FindMember<FbxAnimStack>( (&animations[0].fbxname)->Buffer());
-
-		//FbxCritera searchCriteria = FbxCriteria::ObjectType( FbxAnimStack::FbxAnimStack )
-		//FbxAnimStack * lCurrentAnimationStack = lScene->FindMember<FbxAnimStack>( (&animations[0].fbxname)->Buffer());
-
+        FbxAnimStack * lCurrentAnimationStack = lScene->FindMember<FbxAnimStack>( (&animations[0].fbxname)->Buffer());
         if (lCurrentAnimationStack == NULL) {
             cout << "this is a problem. The anim stack should be found in the scene!" << endl;
             // this is a problem. The anim stack should be found in the scene!
@@ -137,6 +137,12 @@ bool ofxFBXScene::load( string path, ofxFBXSceneSettings aSettings ) {
     if( _settings.importBones ) {
         constructSkeletons( lScene->GetRootNode(), currentFbxAnimationLayer );
     }
+    
+    // initialize cache start and stop time
+    mCache_Start = FBXSDK_TIME_INFINITE;
+    mCache_Stop  = FBXSDK_TIME_MINUS_INFINITE;
+    
+    PreparePointCacheData(lScene, mCache_Start, mCache_Stop);
     
     return true;
 }
@@ -172,7 +178,7 @@ string ofxFBXScene::getFbxFolderPath() {
 
 #pragma mark - Textures
 // ---------------------------------------------- animation
-void ofxFBXScene::cacheTexturesInScene( FbxScene* pScene ) {
+void ofxFBXScene::cacheTexturesInScene( FbxScene* pScene, const std::string & app_name ) {
     // Load the textures into GPU, only for file texture now
     const int lTextureCount = pScene->GetTextureCount();
     for (int lTextureIndex = 0; lTextureIndex < lTextureCount; ++lTextureIndex)
@@ -212,15 +218,14 @@ void ofxFBXScene::cacheTexturesInScene( FbxScene* pScene ) {
             }
             
             if (bFoundTexture) {
-                ofTexture* texture = new ofTexture();
+//                ofTexture* texture = new ofTexture();
                 ofPixels pixels;
-                bool loaded = ofLoadImage(pixels, filepath);
-                if(loaded){
-                    texture->allocate(pixels.getWidth(), pixels.getHeight(), ofGetGlInternalFormat(pixels), false);
-                    pixels.mirror(true, false);
-                    texture->loadData(pixels);
-                }
-                if(loaded) {
+                std::cout << filepath << std::endl;
+                ogfTexture * texture = new ogfTexture( filepath, app_name );
+//                bool loaded = texture->loadFromFile( filepath );
+                
+                if( texture->isLoaded() ) {
+                    
                     ofLogVerbose("Loaded the texture from ") << filepath << endl;
                     
                     texture->getTextureData().bFlipTexture = true;
@@ -244,7 +249,7 @@ void ofxFBXScene::deleteCachedTexturesInScene( FbxScene* pScene ) {
         FbxTexture* lTexture = pScene->GetTexture(lTextureIndex);
         FbxFileTexture* lFileTexture = FbxCast<FbxFileTexture>(lTexture);
         if (lFileTexture && lFileTexture->GetUserDataPtr()) {
-            ofTexture* texture = static_cast<ofTexture *>( lFileTexture->GetUserDataPtr() );
+            ogfTexture* texture = static_cast<ogfTexture *>( lFileTexture->GetUserDataPtr() );
             lFileTexture->SetUserDataPtr(NULL);
             delete texture;
             texture = NULL;
@@ -274,7 +279,7 @@ void ofxFBXScene::cacheMaterialsRecursive( FbxNode* pNode ) {
         FbxSurfaceMaterial * lMaterial = pNode->GetMaterial(lMaterialIndex);
         if (lMaterial && !lMaterial->GetUserDataPtr()) {
             ofxFBXMeshMaterial* materialCache = new ofxFBXMeshMaterial();
-            materialCache->setup( lMaterial );
+            materialCache->setup( lMaterial, this->m_app_name );
             lMaterial->SetUserDataPtr( materialCache );
         }
     }
@@ -368,20 +373,31 @@ void ofxFBXScene::populateSkeletons( vector< shared_ptr<ofxFBXSkeleton> >& aInSk
 
 #pragma mark - Meshes
 // ---------------------------------------------- meshes
-void ofxFBXScene::populateMeshesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLayer ) {
+void ofxFBXScene::populateMeshesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLayer, int level ) {
+    
+    ofxFBXSceneBEGIN
+        
     FbxNodeAttribute* lNodeAttribute = pNode->GetNodeAttribute();
-//    cout << "populatesMeshesRecursive :: " << ofGetElapsedTimef() << endl;
+    
     if (lNodeAttribute) {
+        
+        ofxFBXSceneINFO << ( "\tNODE NAME : " + pNode->GetNameOnly() );
+        ofxFBXSceneINFO << ( "\tNODE LEVEL : " + std::to_string(level) );
+        ofxFBXSceneINFO << ( "\tNODE ID : " + std::to_string(pNode->GetUniqueID()) );
+        ofxFBXSceneINFO << ( "\tNODE PARENT ID : " + std::to_string(pNode->GetParent()->GetUniqueID()) );
+        
         // Bake mesh as VBO(vertex buffer object) into GPU.
-        if (lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eMesh || lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eNurbs || lNodeAttribute->GetAttributeType() == FbxNodeAttribute::ePatch || lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eNurbsSurface) {
+        if ( lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eMesh ||
+             lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eNurbs ||
+             lNodeAttribute->GetAttributeType() == FbxNodeAttribute::ePatch ||
+             lNodeAttribute->GetAttributeType() == FbxNodeAttribute::eNurbsSurface ) {
             
             FbxGeometryConverter lGeomConverter( lSdkManager );
             lGeomConverter.Triangulate( pNode->GetMesh(), true );
             
             if(pNode->GetMesh()) {
-//                meshesList.push_back(ofxFBXMesh());
-//                ofxFBXMesh & mesh = meshesList.back();
-                meshes.push_back( shared_ptr<ofxFBXMesh>( new ofxFBXMesh() ));
+
+                meshes.push_back( shared_ptr<ofxFBXMesh>( new ofxFBXMesh( level, this->_settings.log_id ) ) );
                 shared_ptr<ofxFBXMesh> mesh = meshes.back();
                 mesh->setup( pNode );
                 
@@ -420,9 +436,14 @@ void ofxFBXScene::populateMeshesRecursive( FbxNode* pNode, FbxAnimLayer* pAnimLa
     }
     
     const int lChildCount = pNode->GetChildCount();
+    
+    ofxFBXSceneINFO << ( "\tNODE CHILD COUNT : " + std::to_string( lChildCount ) );
+
     for (int lChildIndex = 0; lChildIndex < lChildCount; ++lChildIndex) {
-        populateMeshesRecursive( pNode->GetChild(lChildIndex), pAnimLayer );
+        populateMeshesRecursive( pNode->GetChild(lChildIndex), pAnimLayer, level + 1 );
     }
+    
+    ofxFBXSceneEND
 }
 
 #pragma mark - Bones / Skeleton
@@ -578,15 +599,90 @@ void ofxFBXScene::populatePoses( vector< shared_ptr<ofxFBXPose> >& aInPoses ) {
     
 }
 
-
-
-
-
-
-
-
-
-
+void ofxFBXScene::PreparePointCacheData(FbxScene* pScene, FbxTime &pCache_Start, FbxTime &pCache_Stop)
+{
+    // This function show how to cycle through scene elements in a linear way.
+    const int lNodeCount = pScene->GetSrcObjectCount<FbxNode>();
+    FbxStatus lStatus;
+    
+    for (int lIndex=0; lIndex<lNodeCount; lIndex++)
+    {
+        FbxNode* lNode = pScene->GetSrcObject<FbxNode>(lIndex);
+        
+        if (lNode->GetGeometry())
+        {
+            int i, lVertexCacheDeformerCount = lNode->GetGeometry()->GetDeformerCount(FbxDeformer::eVertexCache);
+            
+            // There should be a maximum of 1 Vertex Cache Deformer for the moment
+            lVertexCacheDeformerCount = lVertexCacheDeformerCount > 0 ? 1 : 0;
+            
+            for (i=0; i<lVertexCacheDeformerCount; ++i )
+            {
+                // Get the Point Cache object
+                FbxVertexCacheDeformer* lDeformer = static_cast<FbxVertexCacheDeformer*>(lNode->GetGeometry()->GetDeformer(i, FbxDeformer::eVertexCache));
+                if( !lDeformer ) continue;
+                FbxCache* lCache = lDeformer->GetCache();
+                if( !lCache ) continue;
+                
+                // Process the point cache data only if the constraint is active
+                if (lDeformer->Active.Get())
+                {
+                    if (lCache->GetCacheFileFormat() == FbxCache::eMaxPointCacheV2)
+                    {
+                        // This code show how to convert from PC2 to MC point cache format
+                        // turn it on if you need it.
+#if 0
+                        if (!lCache->ConvertFromPC2ToMC(FbxCache::eMCOneFile,
+                                                        FbxTime::GetFrameRate(pScene->GetGlobalTimeSettings().GetTimeMode())))
+                        {
+                            // Conversion failed, retrieve the error here
+                            FbxString lTheErrorIs = lCache->GetStaus().GetErrorString();
+                        }
+#endif
+                    }
+                    else if (lCache->GetCacheFileFormat() == FbxCache::eMayaCache)
+                    {
+                        // This code show how to convert from MC to PC2 point cache format
+                        // turn it on if you need it.
+                        //#if 0
+                        if (!lCache->ConvertFromMCToPC2(FbxTime::GetFrameRate(pScene->GetGlobalSettings().GetTimeMode()), 0, &lStatus))
+                        {
+                            // Conversion failed, retrieve the error here
+                            FbxString lTheErrorIs = lStatus.GetErrorString();
+                        }
+                        //#endif
+                    }
+                    
+                    
+                    // Now open the cache file to read from it
+                    if (!lCache->OpenFileForRead(&lStatus))
+                    {
+                        // Cannot open file
+                        FbxString lTheErrorIs = lStatus.GetErrorString();
+                        
+                        // Set the deformer inactive so we don't play it back
+                        lDeformer->Active = false;
+                    }
+                    else
+                    {
+                        // get the start and stop time of the cache
+                        FbxTime lChannel_Start;
+                        FbxTime lChannel_Stop;
+                        int lChannelIndex = lCache->GetChannelIndex(lDeformer->Channel.Get());
+                        if(lCache->GetAnimationRange(lChannelIndex, lChannel_Start, lChannel_Stop))
+                        {
+                            // get the smallest start time
+                            if(lChannel_Start < pCache_Start) pCache_Start = lChannel_Start;
+                            
+                            // get the biggest stop time
+                            if(lChannel_Stop  > pCache_Stop)  pCache_Stop  = lChannel_Stop;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 

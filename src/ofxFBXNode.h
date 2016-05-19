@@ -24,17 +24,25 @@
 // this class is basically ofNode, but opening up more of the vars so that we can
 // set them directly so that it is much faster //
 
+#define ofxFBXNodeBEGIN CLOG( INFO, (this->m_log_id + "begin").c_str() ) << "";
+#define ofxFBXNodeINFO CLOG( INFO, this->m_log_id.c_str() )
+#define ofxFBXNodeWARN CLOG( WARNING, this->m_log_id.c_str() )
+#define ofxFBXNodeERROR CLOG( ERROR, this->m_log_id.c_str() )
+#define ofxFBXNodeEND CLOG( INFO, (this->m_log_id ).c_str() ) << "\n\n";
+
 class ofxFBXNode : public ofNode {
 public:
     
-    ofxFBXNode();
+    ofxFBXNode( int level = 0, const string & log_id = "" );
     ~ofxFBXNode();
     
     void setup( FbxNode *pNode );
     string getName();
     FbxString getFbxName();
     void setName( FbxString aName );
-    
+
+    int getLevel(){ return this->m_level; }
+
 //    // set parent to link nodes
 //	// transformations are inherited from parent node
 //	// set to NULL if not needed (default)
@@ -121,6 +129,9 @@ public:
     
 protected:
     string name;
+    
+    std::string m_log_id;
+    int m_level;
     
 //    ofxFBXNode* parent;
 //    ofxFBXNode* globalParent;

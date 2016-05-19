@@ -73,6 +73,8 @@ public:
     
     vector<ofNode> meshTransforms;
     
+    ofNode& getMeshTransform( int index );
+    ofMesh& getMesh( int index );
     
 protected:
     vector< shared_ptr<ofxFBXSkeleton> > skeletons;

@@ -7,6 +7,7 @@
 //
 
 #include "ofxFBXMeshMaterial.h"
+#include "ogfStaticsAppEnv.hpp"
 
 //--------------------------------------------------------------
 ofxFBXMeshMaterial::ofxFBXMeshMaterial() {
@@ -18,7 +19,7 @@ ofxFBXMeshMaterial::ofxFBXMeshMaterial() {
 }
 
 //--------------------------------------------------------------
-void ofxFBXMeshMaterial::setup( const FbxSurfaceMaterial * pMaterial ) {
+void ofxFBXMeshMaterial::setup( const FbxSurfaceMaterial * pMaterial, const std::string & app_name ) {
     ofFloatColor tEmissive = getMaterialProperty( pMaterial, FbxSurfaceMaterial::sEmissive, FbxSurfaceMaterial::sEmissiveFactor );
     ofFloatColor tAmbient = getMaterialProperty( pMaterial, FbxSurfaceMaterial::sAmbient, FbxSurfaceMaterial::sAmbientFactor );
     ofFloatColor tDiffuse = getMaterialProperty( pMaterial, FbxSurfaceMaterial::sDiffuse, FbxSurfaceMaterial::sDiffuseFactor );
@@ -52,43 +53,43 @@ void ofxFBXMeshMaterial::setup( const FbxSurfaceMaterial * pMaterial ) {
     
     // search for a texture based on the material properties :)
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sEmissive );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sEmissive, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sAmbient );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sAmbient, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sDiffuse );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sDiffuse, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sSpecular );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sSpecular, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sNormalMap );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sNormalMap, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sBump );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sBump, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sDisplacementColor );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sDisplacementColor, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sMultiLayer );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sMultiLayer, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sReflection );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sReflection, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sShadingModel );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sShadingModel, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sShininess );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sShininess, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sTransparentColor );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sTransparentColor, app_name );
     }
     if(!hasTexture()) {
-        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sVectorDisplacementColor );
+        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sVectorDisplacementColor, app_name );
     }
     if(!hasTexture()) {
 //        findTextureForProperty( pMaterial, FbxSurfaceMaterial::sMultiLayer );
@@ -126,7 +127,7 @@ bool ofxFBXMeshMaterial::hasTexture() {
 }
 
 //--------------------------------------------------------------
-ofTexture* ofxFBXMeshMaterial::getTexturePtr() {
+ogfTextureShPtr ofxFBXMeshMaterial::getTextureShPtr() {
     return texture;
 }
 
@@ -216,7 +217,8 @@ ofFloatColor ofxFBXMeshMaterial::getMaterialProperty(const FbxSurfaceMaterial * 
 
 //--------------------------------------------------------------
 bool ofxFBXMeshMaterial::findTextureForProperty(const FbxSurfaceMaterial * pMaterial,
-                                                const char * pPropertyName ) {
+                                                const char * pPropertyName,
+                                                const std::string & app_name ) {
     
     const FbxProperty lProperty = pMaterial->FindProperty(pPropertyName);
     
@@ -227,7 +229,9 @@ bool ofxFBXMeshMaterial::findTextureForProperty(const FbxSurfaceMaterial * pMate
         if (lTextureCount) {
             const FbxFileTexture* lTexture = lProperty.GetSrcObject<FbxFileTexture>();
             if (lTexture && lTexture->GetUserDataPtr()) {
-                texture = static_cast<ofTexture *>( lTexture->GetUserDataPtr() );
+                texture = ogfTextureShPtr( static_cast<ogfTexture*>( lTexture->GetUserDataPtr() ) );
+                std::cout << "ofxFBXMeshMaterial::findTextureForProperty" << texture->getName() << std::endl;
+//                ogfStaticsAppEnv::registerTexture( app_name, texture->getID(), texture );
                 return true;
             }
         }
@@ -238,7 +242,9 @@ bool ofxFBXMeshMaterial::findTextureForProperty(const FbxSurfaceMaterial * pMate
                 const FbxFileTexture* lTexture = lLTexture->GetSrcObject<FbxFileTexture>();
 //                cout << "-------> Layered " << pPropertyName << " layered texture = " << lLTextureCount << endl;
                 if (lTexture && lTexture->GetUserDataPtr()) {
-                    texture = static_cast<ofTexture *>( lTexture->GetUserDataPtr() );
+                    texture = ogfTextureShPtr( static_cast<ogfTexture*>( lTexture->GetUserDataPtr() ) );
+                    std::cout << "ofxFBXMeshMaterial::findTextureForProperty" << texture->getName() << std::endl;
+//                    ogfStaticsAppEnv::registerTexture( app_name, texture->getID(), texture );
                     return true;
                 }
             }

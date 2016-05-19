@@ -9,8 +9,12 @@
 #include "ofxFBXMesh.h"
 #include "ofxFBX.h"
 
+#include "easylogging++.h"
+
 //--------------------------------------------------------------
-ofxFBXMesh::ofxFBXMesh() {
+ofxFBXMesh::ofxFBXMesh( int level, const string & log_id ) :
+ofxFBXNode( level, log_id )
+{
     fbxMesh = NULL;
     bAllMappedByControlPoint    = true;
     mNormalsArray = NULL;
@@ -44,21 +48,17 @@ void ofxFBXMesh::setup( FbxNode *pNode ) {
     setFBXMesh( pNode->GetMesh() );
 }
 
-//--------------------------------------------------------------
-void ofxFBXMesh::setFBXMesh( FbxMesh* lMesh ) {
-	fbxMesh = lMesh;
-//	name = lMesh->GetName();
+//------------------------------------------------------------------------------
+void ofxFBXMesh::setFBXMesh( FbxMesh* lMesh ) { ofxFBXMeshBEGIN
+
+    fbxMesh = lMesh;
 	mesh.clear();
     
     // from ViewScene Example included with the FBX SDK //
-    if (!lMesh->GetNode()) {
-        ofLogError("ofxFBXMesh") << " error setFBXMesh, lMesh->GetNode failed" << endl;
-        return;
-    }
-    
+    if (!lMesh->GetNode()) { ofxFBXMeshERROR << "lMesh->GetNode failed"; return; }
     
     const int lPolygonCount = lMesh->GetPolygonCount();
-    
+    ofxFBXMeshINFO << "POLYGON COUNT : " + std::to_string( lPolygonCount );
     
     // Count the polygon count of each material
     FbxLayerElementArrayTemplate<int>* lMaterialIndice = NULL;
@@ -66,6 +66,9 @@ void ofxFBXMesh::setFBXMesh( FbxMesh* lMesh ) {
     if (lMesh->GetElementMaterial()) {
         lMaterialIndice = &lMesh->GetElementMaterial()->GetIndexArray();
         lMaterialMappingMode = lMesh->GetElementMaterial()->GetMappingMode();
+        
+        ofxFBXMeshINFO << "MAPPING MODE : " + std::to_string( lMaterialMappingMode );
+        
         if (lMaterialIndice && lMaterialMappingMode == FbxGeometryElement::eByPolygon) {
             FBX_ASSERT(lMaterialIndice->GetCount() == lPolygonCount);
             if (lMaterialIndice->GetCount() == lPolygonCount) {
@@ -319,7 +322,8 @@ void ofxFBXMesh::setFBXMesh( FbxMesh* lMesh ) {
         }
     }
     
-}
+
+ofxFBXMeshEND }
 
 //--------------------------------------------------------------
 void ofxFBXMesh::configureMesh( ofMesh& aMesh ) {
@@ -330,7 +334,9 @@ void ofxFBXMesh::configureMesh( ofMesh& aMesh ) {
 void ofxFBXMesh::updateMesh( ofMesh* aMesh, FbxTime& pTime, FbxAnimLayer * pAnimLayer, FbxPose* pPose ) {
     const bool lHasShape    = fbxMesh->GetShapeCount() > 0;
     const bool lHasSkin     = fbxMesh->GetDeformerCount(FbxDeformer::eSkin) > 0;
-    const bool lHasDeformation = lHasShape || lHasSkin;
+    const bool lHasVertexCache = fbxMesh->GetDeformerCount(FbxDeformer::eVertexCache) &&
+    (static_cast<FbxVertexCacheDeformer*>(fbxMesh->GetDeformer(0, FbxDeformer::eVertexCache)))->Active.Get();
+    const bool lHasDeformation = lHasShape || lHasSkin || lHasVertexCache;
     
     const int lVertexCount = fbxMesh->GetControlPointsCount();
     if(!lHasDeformation || lVertexCount < 3) return;
@@ -354,18 +360,25 @@ void ofxFBXMesh::updateMesh( ofMesh* aMesh, FbxTime& pTime, FbxAnimLayer * pAnim
         }
     }
     
-    if(lHasShape) {
-        computeBlendShapes( aMesh, pTime, pAnimLayer );
-    }
-    if(lHasSkin) {
-        //we need to get the number of clusters. which are controlled by bones //
-        const int lSkinCount = fbxMesh->GetDeformerCount(FbxDeformer::eSkin);
-        int lClusterCount = 0;
-        for (int lSkinIndex = 0; lSkinIndex < lSkinCount; ++lSkinIndex) {
-            lClusterCount += ((FbxSkin *)(fbxMesh->GetDeformer(lSkinIndex, FbxDeformer::eSkin)))->GetClusterCount();
+    if (lHasVertexCache)
+    {
+        ReadVertexCacheData( fbxMesh, pTime, lVertexArray );
+        
+    } else {
+    
+        if(lHasShape) {
+            computeBlendShapes( aMesh, pTime, pAnimLayer );
         }
-        if (lClusterCount) {
-            computeSkinDeformation( lGlobalOffPosition, pTime, pAnimLayer, lVertexArray, lNormalArray, pPose );
+        if(lHasSkin) {
+            //we need to get the number of clusters. which are controlled by bones //
+            const int lSkinCount = fbxMesh->GetDeformerCount(FbxDeformer::eSkin);
+            int lClusterCount = 0;
+            for (int lSkinIndex = 0; lSkinIndex < lSkinCount; ++lSkinIndex) {
+                lClusterCount += ((FbxSkin *)(fbxMesh->GetDeformer(lSkinIndex, FbxDeformer::eSkin)))->GetClusterCount();
+            }
+            if (lClusterCount) {
+                computeSkinDeformation( lGlobalOffPosition, pTime, pAnimLayer, lVertexArray, lNormalArray, pPose );
+            }
         }
     }
 //    cout << "Calling update mesh lHasShape = " << lHasShape << " skin = " << lHasSkin << " lHasDeformation = " << lHasDeformation << endl;
@@ -412,6 +425,39 @@ void ofxFBXMesh::updateMesh( ofMesh* aMesh, FbxTime& pTime, FbxAnimLayer * pAnim
     
 }
 
+//--------------------------------------------------------------
+int ofxFBXMesh::preDraw( ofMesh* aMesh ) {
+    
+    veebs.updateMesh( *aMesh );
+    const int lSubMeshCount = subMeshes.size();
+    glEnable( GL_NORMALIZE );
+    
+    if(veebs.getIsAllocated()) {
+        
+        if(lSubMeshCount > 0) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL );
+            veebs.bind();
+        }
+    }
+    return lSubMeshCount;
+}
+
+//--------------------------------------------------------------
+void ofxFBXMesh::subDraw( int index ) {
+    
+    GLsizei lOffset = subMeshes[index].indexOffset * sizeof(unsigned int);
+    //            const GLsizei lElementCount = meshMaterials[lIndex].triangleCount * 3;
+    const GLsizei lElementCount = subMeshes[index].totalIndices;
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, veebs.getIndexId() );
+    //            cout << "lElementCount = " << lElementCount << " mesh is using indices = " << mesh.hasIndices() << endl;
+    glDrawElements( GL_TRIANGLES, lElementCount, GL_UNSIGNED_INT, reinterpret_cast<const GLvoid *>(lOffset));
+}
+
+//--------------------------------------------------------------
+void ofxFBXMesh::postDraw( int sub_meshes_count ) {
+
+    if( sub_meshes_count > 0 ) veebs.unbind();
+}
 
 //--------------------------------------------------------------
 void ofxFBXMesh::draw( ofMesh* aMesh ) {
@@ -1109,6 +1155,43 @@ void ofxFBXMesh::populateNormals( FbxVector4* pNormalsArray ) {
     }//end if lNormalElement
 }
 
-
+void ofxFBXMesh::ReadVertexCacheData(FbxMesh* pMesh,
+                                     FbxTime& pTime,
+                                     FbxVector4* pVertexArray)
+{
+    FbxVertexCacheDeformer* lDeformer     = static_cast<FbxVertexCacheDeformer*>(pMesh->GetDeformer(0, FbxDeformer::eVertexCache));
+    FbxCache*               lCache        = lDeformer->GetCache();
+    int                     lChannelIndex = lCache->GetChannelIndex(lDeformer->Channel.Get());
+    unsigned int            lVertexCount  = (unsigned int)pMesh->GetControlPointsCount();
+    bool                    lReadSucceed  = false;
+    float*                  lReadBuf      = NULL;
+    unsigned int			BufferSize	  = 0;
+        
+    if (lDeformer->Type.Get() != FbxVertexCacheDeformer::ePositions)
+        // only process positions
+        return;
+    
+    unsigned int Length = 0;
+    lCache->Read(NULL, Length, FBXSDK_TIME_ZERO, lChannelIndex);
+    if (Length != lVertexCount*3)
+        // the content of the cache is by vertex not by control points (we don't support it here)
+        return;
+    
+    lReadSucceed = lCache->Read(&lReadBuf, BufferSize, pTime, lChannelIndex);
+    if (lReadSucceed)
+    {
+        unsigned int lReadBufIndex = 0;
+        
+        while (lReadBufIndex < 3*lVertexCount)
+        {
+            // In statements like "pVertexArray[lReadBufIndex/3].SetAt(2, lReadBuf[lReadBufIndex++])",
+            // on Mac platform, "lReadBufIndex++" is evaluated before "lReadBufIndex/3".
+            // So separate them.
+            pVertexArray[lReadBufIndex/3].mData[0] = lReadBuf[lReadBufIndex]; lReadBufIndex++;
+            pVertexArray[lReadBufIndex/3].mData[1] = lReadBuf[lReadBufIndex]; lReadBufIndex++;
+            pVertexArray[lReadBufIndex/3].mData[2] = lReadBuf[lReadBufIndex]; lReadBufIndex++;
+        }
+    }
+}
 
 
